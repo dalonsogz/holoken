@@ -54,9 +54,10 @@ public class SaveGameListAdapter extends BaseAdapter {
         this.mGameFiles.clear();
         File dir = new File(SaveGameListActivity.SAVEGAME_DIR);
         String[] allFiles = dir.list();
-        for (String entryName : allFiles)
-            if (entryName.startsWith("savegame_"))
-                this.mGameFiles.add(entryName);
+        if (allFiles!=null)
+            for (String entryName : allFiles)
+                if (entryName.startsWith("savegame_"))
+                    this.mGameFiles.add(entryName);
         Collections.sort((List<String>)this.mGameFiles, new SortSavedGames());
     }
 

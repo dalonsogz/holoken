@@ -7,7 +7,7 @@ android {
     namespace 'com.tortuca.holoken'
 
     defaultConfig {
-        applicationId "com.tortuca.holokenTest"
+        applicationId "com.tortuca.holoken"
         minSdk 21
         targetSdk 34
         versionCode 1

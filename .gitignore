@@ -20,6 +20,7 @@ build/
 
 # App-specific files
 app/build/
+app/release/
 
 # Miscellaneous
 *.DS_Store

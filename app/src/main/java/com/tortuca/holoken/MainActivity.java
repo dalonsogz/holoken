@@ -25,8 +25,8 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Bitmap.CompressFormat;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -52,13 +52,20 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
+import android.content.ContentValues;
+import android.provider.MediaStore;
+import android.os.Build;
+import java.io.OutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import android.Manifest;
 
 public class MainActivity extends Activity {
     
@@ -90,7 +97,9 @@ public class MainActivity extends Activity {
     TextView timeView, recordView;
     long starttime = 0;
     int lastnum = 0;
-    
+
+    Menu currentMenu;
+
     public GridView kenKenGrid;
     public UndoList undoList = new UndoList(MAX_UNDO_LIST);
     
@@ -243,7 +252,16 @@ public class MainActivity extends Activity {
                     } else if (((ImageButton) v).getId() == R.id.icon_hint) {
                         checkProgress();
                     } else if (((ImageButton) v).getId() == R.id.icon_overflow) {
-                        openOptionsMenu();
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                                invalidateOptionsMenu();
+                            }
+                            forceRefreshOptionsMenu();
+                            Log.d("MenuDebug", "************************************* calling openOptionsMenu");
+                            openOptionsMenu();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
             });
@@ -262,7 +280,24 @@ public class MainActivity extends Activity {
         }
         
     }
-    
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        menu.clear(); // Limpia los elementos actuales
+        getMenuInflater().inflate(R.menu.activity_main, menu); // Vuelve a inflar el menú
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+    private void forceRefreshOptionsMenu() {
+        runOnUiThread(() -> {
+            if (currentMenu != null) {
+                onCreateOptionsMenu(currentMenu);
+                onPrepareOptionsMenu(currentMenu);
+            }
+        });
+    }
+
+
     protected void onActivityResult(int requestCode, int resultCode,
               Intent data) {
         if (requestCode != 7 || resultCode != Activity.RESULT_OK)
@@ -305,15 +340,16 @@ public class MainActivity extends Activity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.activity_main, menu);
-        return true;
+        currentMenu = menu; // Guarda la referencia del menú
+            return true;
     }
     
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        /**case R.id.menu_new:
+         createNewGame();
+         break;              **/
         if (item.getItemId() == R.id.menu_save) {
-            /**case R.id.menu_new:
-             createNewGame();
-             break;              **/
             Intent i = new Intent(this, SaveGameListActivity.class);
             startActivityForResult(i, 7);
         } else if (item.getItemId() == R.id.menu_restart_game) {
@@ -678,41 +714,74 @@ public class MainActivity extends Activity {
     public void getScreenShot() {
         if (!kenKenGrid.mActive)
             return;
-        File path = new File(Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_PICTURES)+"/HoloKen/");
-        if (!path.exists()) 
-               path.mkdir();
 
         GridView grid= (GridView)findViewById(R.id.gridview);
         for (GridCell cell : grid.mCells)
             cell.mSelected = false;
         grid.setDrawingCacheEnabled(true);
-        String filename = "/holoken_"+ grid.mGridSize + "_" +
+        String filename = "holoken_"+ grid.mGridSize + "_" +
                 new SimpleDateFormat("yyyyMMdd_HHmm").format(new Date())+".png";
 
         //Bitmap bitmap = loadBitmapFromView(grid);
         Bitmap bitmap = grid.getDrawingCache();
-        File file = new File(path,filename);
-        try  {
-            file.createNewFile();
-            FileOutputStream ostream = new FileOutputStream(file);
-            bitmap.compress(CompressFormat.PNG, 90, ostream);
-            ostream.flush();
-            ostream.close();
-        } 
-        catch (Exception e)          {
-            e.printStackTrace();
-        }
+
+        getPermissions();
+        saveImage(bitmap,  filename);
+
         grid.destroyDrawingCache();
+        File path = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)+"/HoloKen/");
         makeToast(getString(R.string.puzzle_screenshot)+path);
-        
+
+        File file = new File(path, filename);
+        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
         // Initiate sharing dialog
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("image/png");
         share.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(file));
-        startActivity(Intent.createChooser(share, getString(R.string.menu_share)));
+        share.putExtra(Intent.EXTRA_STREAM, uri);
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(share, getString(R.string.menu_share)));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
-    
+
+    public void getPermissions() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+        }
+    }
+
+    public void saveImage(Bitmap bitmap, String filename) {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/HoloKen");
+
+        OutputStream outputStream = null;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+
+                outputStream = getContentResolver().openOutputStream(
+                        getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                );
+            } else {
+                File path = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "HoloKen");
+                if (!path.exists()) {
+                    path.mkdirs();
+                }
+                File file = new File(path, filename);
+                outputStream = new FileOutputStream(file);
+            }
+            if (outputStream != null) {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, outputStream);
+                outputStream.close();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
     
     /***************************
      * Functions to create various alert dialogs
