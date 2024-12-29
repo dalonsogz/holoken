@@ -383,7 +383,7 @@ public class MainActivity extends Activity {
          if (selectedCell == null)
              return super.onContextItemSelected(item);
 
-         if (item.getItemId() == R.id.menu_reveal_cell) {
+         if (item.getItemId() == R.id.menu_show_mistakes) {
              this.kenKenGrid.markInvalidChoices();
              return true;
          } else if (item.getItemId() == R.id.menu_reveal_cell) {
